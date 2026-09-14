@@ -109,14 +109,15 @@ def parse_ps_ttys(text: str) -> dict[str, dict]:
 def tty_of_stat_field7(pid: int) -> str | None:
     """Return the controlling tty of a process from /proc/<pid>/stat field 7.
 
-    Field 7 is tty_nr, encoded as major*4096 + minor with ptmx major 136:
-    tty_nr = 136 * 256 + minor... in practice the raw number's low bits give
-    the pts minor: pts/N where N = tty_nr & 0xff (0x5000 | minor for pts/ptmx).
-    Count fields from the end-safe form: comm can contain spaces/parens, so
-    take the text after the last ')'.
+    Field 7 is tty_nr, encoded as (major << 8) | minor, with major 136
+    (0x8800) for the unix98 pty pts/ptmx group: pts/N where
+    N = tty_nr & 0xff. Comm can contain spaces and parens, so the fields
+    after state are counted from the text after the last ')'.
     """
     try:
-        with open(f"{PROC_STAT_DIR}/{pid}/stat", "rb") as fh:
+        # read the path lazily so tests can monkeypatch PROC_STAT_DIR
+        path = f"{PROC_STAT_DIR}/{pid}/stat"
+        with open(path, "rb") as fh:
             data = fh.read().decode("ascii", "replace")
     except OSError:
         return None
@@ -135,9 +136,11 @@ def tty_of_stat_field7(pid: int) -> str | None:
         return None
     if tty_nr == 0:
         return None
-    # pts/ptmx device: (major << 8 | minor) for the unix98 pty master
-    minor = tty_nr & 0xFF
-    return f"pts/{minor}"
+    # unix98 ptmx major is 136 (0x8800); a tty_nr outside that group and the
+    # legacy 0x5000 group is not a pts we can name
+    if tty_nr & ~0xFF not in (0x8800, 0x5000):
+        return None
+    return f"pts/{tty_nr & 0xFF}"
 
 
 async def discover() -> list[Session]:

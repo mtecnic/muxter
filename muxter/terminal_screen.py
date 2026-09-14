@@ -15,14 +15,21 @@ class TerminalScreen:
     """A pyte HistoryScreen fed by raw bytes, with resize support."""
 
     def __init__(self, cols: int = 80, rows: int = 24, history: int = 1000):
+        # pyte's signature is HistoryScreen(columns, lines, history=...).
         self.screen = pyte.HistoryScreen(cols, rows, history=history)
         self.stream = pyte.Stream(self.screen)
 
     def feed(self, data: bytes | str) -> None:
-        """Feed raw terminal bytes; pyte's stream parses the byte stream."""
+        """Feed raw terminal bytes; pyte's stream parses the byte stream.
+
+        pyte 0.8.2's Stream.feed has a byte-level UnicodeStream, but a
+        :class:`HistoryScreen` is wrapped in an :class:`HistoryScreen` stream
+        layer that needs text, so bytes are decoded here.
+        """
         self.stream.feed(data.decode("utf-8", "ignore") if isinstance(data, bytes) else data)
 
     def resize(self, cols: int, rows: int) -> None:
+        # pyte's signature is resize(lines, columns).
         self.screen.resize(rows, cols)
 
     @property
@@ -47,7 +54,10 @@ class TerminalScreen:
         history = getattr(self.screen, "history", None)
         if history is None:
             return []
-        rows = list(history.top) + list(reversed(history.bottom))
+        # top is the scrolled-off rows already pushed out (oldest first);
+        # bottom holds rows currently paged back onto the screen, so the
+        # scrollback proper stops where the live screen begins.
+        rows = list(history.top)
         return [self._line_of(row) for row in rows]
 
     @staticmethod

@@ -45,13 +45,13 @@ def test_line_wrap_wraps_onto_next_row():
     assert lines[1].plain == "6789"
 
 
-def test_resize_reflows():
+def test_resize_resizes_and_clips():
     ts = screen(rows=2, cols=10)
     ts.feed(b"aaaabbbbccccdddd")
     ts.resize(4, 5)
     lines = [ln.plain for ln in ts.live_lines()]
     assert ts.rows == 4 and ts.cols == 5
-    assert len(lines) == 5
+    assert len(lines) == 4
     # pyte clips over-wide rows at the right edge on resize; it does not reflow
     assert all(len(ln) <= 5 for ln in lines)
     assert lines[0] == "aaaab"
@@ -70,6 +70,7 @@ def test_erase_display_clears_screen():
     ts = screen()
     ts.feed(b"gone")
     ts.feed(b"\x1b[H\x1b[2J")
+    # ED2 clears below the cursor; the test screen has nothing above the cursor
     assert all(ln.plain == "" for ln in ts.live_lines())
     # ED2 alone does not clear scrollback — ED3 ("reset") does
     ts.feed(b"gone")

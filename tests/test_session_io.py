@@ -30,6 +30,23 @@ def spawned(monkeypatch):
     """Replace PtyProcess.spawn and the fdopen the reader uses."""
     procs: list[FakeProc] = []
 
+    class FakeMaster:
+        """Stand-in for the dup'd master file: a StreamReader in file clothes."""
+
+        def __init__(self):
+            self.reader = asyncio.StreamReader()
+            self.reader.feed_data(b"hello from tmux\n")
+            self.reader.feed_eof()
+
+        def fileno(self):
+            return 7
+
+        def close(self):
+            pass
+
+        async def readline(self):
+            return await self.reader.readline()
+
     def fake_spawn(cmd, dimensions=None, env=None):
         proc = FakeProc()
         proc.spawn_cmd = cmd
@@ -39,14 +56,8 @@ def spawned(monkeypatch):
 
     monkeypatch.setattr(session_io.ptyprocess.PtyProcess, "spawn", staticmethod(fake_spawn))
     monkeypatch.setattr(session_io.os, "set_blocking", lambda fd, mode: None)
-
-    async def fake_fdopen(fd, mode, buffering):
-        reader = asyncio.StreamReader()
-        reader.feed_data(b"hello from tmux\n")
-        reader.feed_eof()
-        return reader
-
-    monkeypatch.setattr(session_io.os, "fdopen", fake_fdopen)
+    monkeypatch.setattr(session_io.os, "dup", lambda fd: 7)
+    monkeypatch.setattr(session_io.os, "fdopen", lambda fd, mode, buffering: FakeMaster())
     return procs
 
 

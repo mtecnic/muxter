@@ -53,21 +53,29 @@ class SessionConnection:
             dimensions=(self.rows, self.cols),
             env={**os.environ, "TERM": "xterm-256color"},
         )
-        # ptyprocess's PtyProcess is a subprocess.Popen subclass; ensure our
-        # own session was created (ptyprocess uses setsid internally) and the
-        # fd is non-blocking for the asyncio reader.
-        os.set_blocking(proc.fd, False)
+        # duplicate the master fd: connect_read_pipe takes one fd and closes
+        # it on EOF, while proc.fd stays open for our writes and terminate()
+        master = os.fdopen(os.dup(proc.fd), "rb", 0)
+        # ptyprocess's PtyProcess is a subprocess.Popen subclass; our own
+        # session was created (ptyprocess uses setsid internally) and this
+        # dup'd fd is non-blocking for the asyncio reader.
+        os.set_blocking(master.fileno(), False)
         self._proc = proc
         loop = asyncio.get_running_loop()
         reader = asyncio.StreamReader()
         protocol = asyncio.StreamReaderProtocol(reader)
-        await loop.connect_read_pipe(lambda: protocol, os.fdopen(proc.fd, "rb", 0))
+        await loop.connect_read_pipe(lambda: protocol, master)
         self._reader = asyncio.create_task(self._pump(reader))
 
-    async def _pump(self, reader: asyncio.StreamReader) -> None:
+    async def _pump(self, reader) -> None:
+        """Drain the master until EOF, delivering every line to subscribers.
+
+        Delivery is *not* gated on ``self.closed``: a connection closed at
+        EOF must still have delivered everything already read.
+        """
         try:
-            while not self.closed:
-                data = await reader.read(65536)
+            while True:
+                data = await reader.readline()
                 if not data:
                     break
                 for cb in list(self._subscribers):
