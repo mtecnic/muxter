@@ -181,6 +181,9 @@ class MuxterApp(App):
     def action_view(self) -> None:
         self._mode = "view"
         self.status.update_bar(mode="view")
+        # back to view mode the filter input is editable again; the terminal
+        # stays focusable but the list must regain focus for j/k to work
+        self.filter_input.disabled = False
         self.session_list.focus()
 
     _KEY_ESCAPES: ClassVar[Mapping[str, bytes]] = {
@@ -191,6 +194,14 @@ class MuxterApp(App):
     def on_key(self, event) -> None:
         if self._mode != "interact" or self.connection is None:
             return
+        # Escape is the escape *hatch* -- it always leaves interact mode and
+        # is never forwarded to the pane, even though a bare ESC is a real
+        # key the pane might otherwise want.
+        if event.key == "escape":
+            event.stop()
+            event.prevent_default()
+            self.action_view()
+            return
         data = None
         if event.character and len(event.character) == 1:
             data = event.character.encode("utf-8")
@@ -200,8 +211,6 @@ class MuxterApp(App):
             self.connection.feed(data)
             event.stop()
             event.prevent_default()
-            if event.key == "escape":
-                self.action_view()
 
     async def action_run_command(self) -> None:
         session = self.session_list.selected_session
@@ -220,7 +229,7 @@ class MuxterApp(App):
             await kill_bare(session.pid)
 
     def action_clear_pane(self) -> None:
-        self.terminal.term.screen.reset_default_margins()
+        self.terminal.term.reset()
         self.terminal.term.screen.history.clear()
         self.terminal.refresh_screen()
         if self.connection is not None:
