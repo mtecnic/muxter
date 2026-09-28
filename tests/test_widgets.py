@@ -16,7 +16,7 @@ from muxter.widgets import SessionList
 
 def sessions() -> list[Session]:
     return [
-        Session(kind="tmux", name="dev-ai", tty="/dev/pts/4", attached=1,
+        Session(kind="tmux", name="testuser", tty="/dev/pts/4", attached=1,
                 created="Tue Sep  8"),
         Session(kind="bare", name="pts/0", tty="/dev/pts/0", shell="bash",
                 attached=1, created="Thu Sep 11"),
@@ -44,19 +44,19 @@ async def mounted_list():
 
 
 async def test_set_sessions_sorts_by_name(mounted_list):
-    assert [s.name for s in mounted_list.sessions] == ["dev-ai", "pts/0", "tempmon"]
+    assert [s.name for s in mounted_list.sessions] == ["testuser", "pts/0", "tempmon"]
     assert len(mounted_list) == 3
 
 
 async def test_items_are_mounted_with_badges(mounted_list):
     labels = [item.children[0].render().plain for item in mounted_list.children]
-    assert labels[0].startswith("[tmux] dev-ai")
+    assert labels[0].startswith("[tmux] testuser")
     assert labels[1].startswith("[bare] pts/0")
 
 
 def test_labels_contain_badge_and_details():
     labels = [SessionList._label(s).plain for s in sessions()]
-    assert labels[0] == "[tmux] dev-ai  /dev/pts/4  1 attached  Tue Sep  8"
+    assert labels[0] == "[tmux] testuser  /dev/pts/4  1 attached  Tue Sep  8"
     assert labels[1] == "[bare] pts/0  bash  /dev/pts/0  1 attached  Thu Sep 11"
     assert labels[2] == "[tmux] tempmon  /dev/pts/8  1 attached"
 
@@ -70,7 +70,7 @@ def test_filter_matches_name_tty_shell_case_insensitive():
         ("PTS/0", ["pts/0"]),
         ("bash", ["pts/0"]),
         ("ZSH", []),
-        ("", ["dev-ai", "pts/0", "tempmon"]),
+        ("", ["testuser", "pts/0", "tempmon"]),
     ]:
         lst.filter_text = text.lower()
         assert [s.name for s in lst.visible_sessions()] == expected, text
@@ -79,7 +79,7 @@ def test_filter_matches_name_tty_shell_case_insensitive():
 async def test_selected_session_follows_index_and_filter(mounted_list):
     lst = mounted_list
     assert lst.index == 0  # the list self-selects its first match on fill
-    assert lst.selected_session.name == "dev-ai"
+    assert lst.selected_session.name == "testuser"
     await lst.set_filter("temp")
     assert lst.index == 0
     assert lst.selected_session.name == "tempmon"

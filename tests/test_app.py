@@ -12,7 +12,7 @@ from muxter.widgets import SessionList
 
 def three_sessions() -> list[Session]:
     return [
-        Session(kind="tmux", name="dev-ai", tty="/dev/pts/4", attached=1,
+        Session(kind="tmux", name="testuser", tty="/dev/pts/4", attached=1,
                 created="Tue Sep  8"),
         Session(kind="bare", name="pts/0", tty="/dev/pts/0", shell="bash",
                 attached=1, created="Thu Sep 11"),
@@ -57,7 +57,7 @@ async def test_app_boots_with_both_panes(app):
 async def test_sessions_land_in_the_list(app):
     async with app.run_test():
         lst = app.query_one("#session-list", SessionList)
-        assert [s.name for s in lst.sessions] == ["dev-ai", "pts/0", "tempmon"]
+        assert [s.name for s in lst.sessions] == ["testuser", "pts/0", "tempmon"]
 
 
 async def test_status_bar_shows_refresh_age(app):
@@ -95,7 +95,7 @@ async def test_j_k_move_selection_and_update_status(app):
         assert app.session_list.index == 0
         await pilot.press("k")  # already at top; must not go negative
         assert app.session_list.index == 0
-        assert "tmux  dev-ai" in app.query_one("#status-bar", StatusBar).render().plain
+        assert "tmux  testuser" in app.query_one("#status-bar", StatusBar).render().plain
 
 
 async def test_i_enters_interact_and_escape_returns(app):
@@ -132,7 +132,7 @@ async def test_enter_on_the_list_connects(app):
         await pilot.pause()
         await pilot.press("enter")
         await pilot.pause()
-        assert connected == ["dev-ai"]
+        assert connected == ["testuser"]
 
 
 async def test_interact_forwards_control_and_named_keys(app):
@@ -158,13 +158,13 @@ async def test_kill_asks_first_and_n_spares_the_session(app, monkeypatch):
     async with app.run_test() as pilot:
         await pilot.press("K")
         await pilot.pause()
-        assert "Kill tmux session dev-ai?" in str(app.screen.query_one("#confirm-box").render())
+        assert "Kill tmux session testuser?" in str(app.screen.query_one("#confirm-box").render())
         await pilot.press("n")
         await pilot.pause()
         assert killed == []
         await pilot.press("K", "y")
         await pilot.pause()
-        assert killed == ["dev-ai"]
+        assert killed == ["testuser"]
 
 
 async def test_status_bar_is_not_under_the_footer(app):

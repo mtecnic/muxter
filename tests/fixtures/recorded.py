@@ -9,7 +9,7 @@ LIST_SESSIONS = """\
 clusterspace-pane-d73d00ce\tWed Sep  9 03:10:35 2026
 clusterspace-pane-fd8404dc\tWed Sep  9 03:11:49 2026
 clusterspace-pane-ffe6467b\tWed Sep  9 03:11:32 2026
-dev-ai\tTue Sep  8 04:47:49 2026
+testuser\tTue Sep  8 04:47:49 2026
 tab-4\tThu Sep  3 02:32:00 2026
 tab-5\tFri Sep 11 00:30:37 2026
 tab-7\tSun Sep  6 15:39:33 2026
@@ -20,7 +20,7 @@ LIST_PANES = """\
 clusterspace-pane-d73d00ce %13 /dev/pts/18
 clusterspace-pane-fd8404dc %15 /dev/pts/22
 clusterspace-pane-ffe6467b %14 /dev/pts/20
-dev-ai %12 /dev/pts/4
+testuser %12 /dev/pts/4
 tab-4 %6 /dev/pts/3
 tab-5 %16 /dev/pts/12
 tab-7 %8 /dev/pts/15
@@ -42,23 +42,23 @@ LIST_CLIENTS = """\
 """
 
 WHO = """\
-dev-ai   pts/0        2026-09-11 00:15 (192.168.86.44)
-dev-ai   pts/1        2026-09-11 00:15 (192.168.86.44)
-dev-ai   pts/2        2026-09-11 00:15 (192.168.86.44)
-dev-ai   pts/3        2026-09-03 02:32 (tmux(3102).%6)
-dev-ai   pts/4        2026-09-08 04:47 (tmux(3102).%12)
-dev-ai   pts/7        2026-09-11 00:15 (192.168.86.44)
-dev-ai   pts/8        2026-09-02 15:05 (tmux(3102).%3)
-dev-ai   pts/9        2026-09-11 00:15 (192.168.86.44)
-dev-ai   pts/10       2026-09-11 00:15 (192.168.86.44)
-dev-ai   pts/11       2026-09-11 00:30 (192.168.86.44)
-dev-ai   pts/12       2026-09-11 00:30 (tmux(3102).%16)
-dev-ai   pts/5        2026-09-11 00:15 (192.168.86.44)
-dev-ai   pts/15       2026-09-06 15:39 (tmux(3102).%8)
-dev-ai   pts/18       2026-09-09 03:10 (tmux(3102).%13)
-dev-ai   pts/20       2026-09-09 03:11 (tmux(3102).%14)
-dev-ai   pts/22       2026-09-09 03:11 (tmux(3102).%15)
-dev-ai   pts/6        2026-09-11 00:15 (192.168.86.44)
+testuser   pts/0        2026-09-11 00:15 (192.168.1.44)
+testuser   pts/1        2026-09-11 00:15 (192.168.1.44)
+testuser   pts/2        2026-09-11 00:15 (192.168.1.44)
+testuser   pts/3        2026-09-03 02:32 (tmux(3102).%6)
+testuser   pts/4        2026-09-08 04:47 (tmux(3102).%12)
+testuser   pts/7        2026-09-11 00:15 (192.168.1.44)
+testuser   pts/8        2026-09-02 15:05 (tmux(3102).%3)
+testuser   pts/9        2026-09-11 00:15 (192.168.1.44)
+testuser   pts/10       2026-09-11 00:15 (192.168.1.44)
+testuser   pts/11       2026-09-11 00:30 (192.168.1.44)
+testuser   pts/12       2026-09-11 00:30 (tmux(3102).%16)
+testuser   pts/5        2026-09-11 00:15 (192.168.1.44)
+testuser   pts/15       2026-09-06 15:39 (tmux(3102).%8)
+testuser   pts/18       2026-09-09 03:10 (tmux(3102).%13)
+testuser   pts/20       2026-09-09 03:11 (tmux(3102).%14)
+testuser   pts/22       2026-09-09 03:11 (tmux(3102).%15)
+testuser   pts/6        2026-09-11 00:15 (192.168.1.44)
 """
 
 PS = """\

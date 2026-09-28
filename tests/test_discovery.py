@@ -38,9 +38,9 @@ def replay(monkeypatch):
 def test_parse_tmux_sessions():
     sessions = parse_tmux_sessions(recorded.LIST_SESSIONS)
     assert len(sessions) == 8
-    dev = sessions["dev-ai"]
+    dev = sessions["testuser"]
     assert dev.kind == "tmux"
-    assert dev.name == "dev-ai"
+    assert dev.name == "testuser"
     assert dev.created == "Tue Sep  8 04:47:49 2026"
 
 
@@ -48,9 +48,9 @@ def test_parse_tmux_panes():
     panes = parse_tmux_panes(recorded.LIST_PANES)
     assert set(panes) == {
         "clusterspace-pane-d73d00ce", "clusterspace-pane-fd8404dc",
-        "clusterspace-pane-ffe6467b", "dev-ai", "tab-4", "tab-5", "tab-7", "tempmon",
+        "clusterspace-pane-ffe6467b", "testuser", "tab-4", "tab-5", "tab-7", "tempmon",
     }
-    assert panes["dev-ai"] == [{"pane_id": "%12", "tty": "/dev/pts/4"}]
+    assert panes["testuser"] == [{"pane_id": "%12", "tty": "/dev/pts/4"}]
 
 
 def test_parse_who_classifies_tmux_vs_bare():
@@ -59,8 +59,8 @@ def test_parse_who_classifies_tmux_vs_bare():
     assert who["pts/3"]["tmux_pane"] == "%6"
     assert who["pts/3"]["tmux_pid"] == "3102"
     assert who["pts/0"]["tmux"] is False
-    assert who["pts/0"]["from"] == "192.168.86.44"
-    assert who["pts/0"]["user"] == "dev-ai"
+    assert who["pts/0"]["from"] == "192.168.1.44"
+    assert who["pts/0"]["user"] == "testuser"
 
 
 def test_parse_ps_ttys_keeps_lowest_pid_per_tty():
@@ -100,7 +100,7 @@ async def test_discover_merges_tmux_and_bare(replay):
     sessions = await discovery.discover()
     by_key = {s.key: s for s in sessions}
 
-    dev = by_key["tmux:dev-ai"]
+    dev = by_key["tmux:testuser"]
     assert dev.tty == "/dev/pts/4"
     assert dev.attached == 1
     assert dev.meta["panes"] == ["%12"]
@@ -109,7 +109,7 @@ async def test_discover_merges_tmux_and_bare(replay):
     assert bare.kind == "bare"
     assert bare.shell == "bash"
     assert bare.attached == 1
-    assert bare.meta["from"] == "192.168.86.44"
+    assert bare.meta["from"] == "192.168.1.44"
     # pts/22 is clusterspace-pane-fd8404dc's %15 pane, so it is a tmux session,
     # never a bare login -- even though its zsh (pid 7100) is in `ps`, which is
     # true of every pane shell: tmux does not write utmp for the shells it
@@ -124,7 +124,7 @@ async def test_discover_merges_tmux_and_bare(replay):
     assert len(sessions) == 8 + 2
     assert sorted(s.name for s in sessions if s.kind == "bare") == ["pts/0", "pts/11"]
     # every tmux pane tty from list-panes is NOT also a bare session, even
-    # when `who` lists a plain login on it (dev-ai's pane lives on pts/4)
+    # when `who` lists a plain login on it (testuser's pane lives on pts/4)
     assert "bare:pts/4" not in by_key
     # a pane tty `who` marks (tmux) stays tmux's alone: pts/12 is tab-5's %16
     assert "tmux:tab-5" in by_key

@@ -61,7 +61,7 @@ def parse_tmux_clients(text: str) -> set[str]:
 def parse_who(text: str) -> dict[str, dict]:
     """Parse `who` output into {pts-name: {user, created, from}}.
 
-    Lines look like: `dev-ai   pts/3   2026-09-03 02:32 (tmux(3102).%6)`.
+    Lines look like: `testuser   pts/3   2026-09-03 02:32 (tmux(3102).%6)`.
     The parenthesised field is the peer: tmux(...) for tmux clients, an IP
     for plain ssh logins.
     """

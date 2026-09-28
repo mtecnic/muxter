@@ -60,11 +60,11 @@ def spawned(monkeypatch):
 
 
 async def test_connect_spawns_tmux_attach_and_pumps(spawned):
-    conn = SessionConnection("dev-ai", rows=30, cols=120)
+    conn = SessionConnection("testuser", rows=30, cols=120)
     received: list[bytes] = []
     conn.subscribe(received.append)
     await conn.connect()
-    assert spawned[0].spawn_cmd == ["tmux", "-2", "attach-session", "-t", "dev-ai"]
+    assert spawned[0].spawn_cmd == ["tmux", "-2", "attach-session", "-t", "testuser"]
     assert spawned[0].dimensions == (30, 120)
     await asyncio.sleep(0.05)
     assert received == [b"hello from tmux\n"]
@@ -108,12 +108,12 @@ async def test_run_command_sends_keys(monkeypatch):
         return ""
 
     monkeypatch.setattr(session_io, "_tmux", fake_tmux)
-    conn = SessionConnection("dev-ai")
+    conn = SessionConnection("testuser")
     await conn.run_command("ls -la")
     # -l is literal for every argument, so Enter must be its own call
     assert calls == [
-        ("tmux", "send-keys", "-t", "dev-ai", "-l", "ls -la"),
-        ("tmux", "send-keys", "-t", "dev-ai", "Enter"),
+        ("tmux", "send-keys", "-t", "testuser", "-l", "ls -la"),
+        ("tmux", "send-keys", "-t", "testuser", "Enter"),
     ]
 
 
@@ -125,10 +125,10 @@ async def test_capture_scrollback_uses_capture_pane(monkeypatch):
         return "old output\n"
 
     monkeypatch.setattr(session_io, "_tmux", fake_tmux)
-    conn = SessionConnection("dev-ai")
+    conn = SessionConnection("testuser")
     out = await conn.capture_scrollback(lines=100)
     assert out == "old output\n"
-    assert calls == [("tmux", "capture-pane", "-p", "-S", "-100", "-t", "dev-ai")]
+    assert calls == [("tmux", "capture-pane", "-p", "-S", "-100", "-t", "testuser")]
 
 
 async def test_tmux_nonzero_raises(monkeypatch):

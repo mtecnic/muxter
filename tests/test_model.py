@@ -80,7 +80,7 @@ async def test_store_unsubscribe():
 
 
 def test_session_key_is_kind_prefixed():
-    assert sess("dev-ai").key == "tmux:dev-ai"
+    assert sess("testuser").key == "tmux:testuser"
     assert sess("pts/0", kind="bare").key == "bare:pts/0"
 
 
