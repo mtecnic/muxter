@@ -45,25 +45,26 @@ def test_line_wrap_wraps_onto_next_row():
     assert lines[1].plain == "6789"
 
 
-def test_resize_resizes_and_clips():
+def test_resize_reflows_instead_of_clipping():
     ts = screen(rows=2, cols=10)
     ts.feed(b"aaaabbbbccccdddd")
-    ts.resize(4, 5)
+    ts.resize(5, 4)
     lines = [ln.plain for ln in ts.live_lines()]
     assert ts.rows == 4 and ts.cols == 5
     assert len(lines) == 4
-    # pyte clips over-wide rows at the right edge on resize; it does not reflow
-    assert all(len(ln) <= 5 for ln in lines)
-    assert lines[0] == "aaaab"
+    # Content is replayed at the new width: each rendered row at the old width
+    # hard-wraps into the new one -- "aaaabbbbcc" -> two 5-col rows, "ccdddd"
+    # -> "ccddd"+"d" -- and the last row scrolls off the 4-row screen.
+    assert lines == ["aaaab", "bbbcc", "ccddd", "d"]
 
 
 def test_scrollback_keeps_scrolled_off_lines():
     ts = screen(rows=2, cols=10, history=50)
     ts.feed(b"old1\nold2\nnew1\nnew2")
     live = [ln.plain for ln in ts.live_lines()]
-    assert live == ["w1", "new2"]
+    assert live == ["new1", "new2"]
     history = [ln.plain for ln in ts.history_lines()]
-    assert history == ["old1", "old2", "new1"]
+    assert history == ["old1", "old2"]
 
 
 def test_erase_display_clears_screen():
