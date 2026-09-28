@@ -24,6 +24,8 @@ def replay(monkeypatch):
             return recorded.LIST_SESSIONS
         if cmd[:2] == ("tmux", "list-panes"):
             return recorded.LIST_PANES
+        if cmd[:2] == ("tmux", "list-clients"):
+            return recorded.LIST_CLIENTS
         if cmd[0] == "who":
             return recorded.WHO
         if cmd[0] == "ps":
@@ -117,9 +119,10 @@ async def test_discover_merges_tmux_and_bare(replay):
     assert "bare:pts/22" not in by_key
 
     # 17 who logins, 8 of which carry a (tmux) marker -- exactly the 8 pane
-    # ttys from list-panes -- leaving 9 bare login shells.
-    assert len(sessions) == 8 + 9
-    assert sum(1 for s in sessions if s.kind == "bare") == 9
+    # ttys from list-panes -- leaving 9 plain logins, 7 of which are windows
+    # running `tmux attach` (list-clients). Only the other 2 are bare shells.
+    assert len(sessions) == 8 + 2
+    assert sorted(s.name for s in sessions if s.kind == "bare") == ["pts/0", "pts/11"]
     # every tmux pane tty from list-panes is NOT also a bare session, even
     # when `who` lists a plain login on it (dev-ai's pane lives on pts/4)
     assert "bare:pts/4" not in by_key

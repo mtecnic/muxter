@@ -53,6 +53,11 @@ def parse_tmux_panes(text: str) -> dict[str, list[dict]]:
     return panes
 
 
+def parse_tmux_clients(text: str) -> set[str]:
+    """Parse `tmux list-clients -F '#{client_tty}'` into a set of pts names."""
+    return {line.strip().removeprefix("/dev/") for line in text.splitlines() if line.strip()}
+
+
 def parse_who(text: str) -> dict[str, dict]:
     """Parse `who` output into {pts-name: {user, created, from}}.
 
@@ -151,15 +156,17 @@ def tty_of_stat_field7(pid: int) -> str | None:
 
 async def discover() -> list[Session]:
     """Discover all sessions: tmux sessions plus bare pts logins."""
-    sessions_text, panes_text, who_text, ps_text = await asyncio.gather(
+    sessions_text, panes_text, clients_text, who_text, ps_text = await asyncio.gather(
         run("tmux", "list-sessions", "-F", "#{session_name}\t#{session_created_string}"),
         run("tmux", "list-panes", "-a", "-F", "#{session_name} #{pane_id} #{pane_tty}"),
+        run("tmux", "list-clients", "-F", "#{client_tty}"),
         run("who"),
         run("ps", "-e", "-o", "pid,tty,comm"),
     )
 
     tmux_sessions = parse_tmux_sessions(sessions_text)
     panes = parse_tmux_panes(panes_text)
+    client_ttys = parse_tmux_clients(clients_text)
     who = parse_who(who_text)
     ps = parse_ps_ttys(ps_text)
 
@@ -184,8 +191,10 @@ async def discover() -> list[Session]:
     # clusterspace-pane-fd8404dc's %15 pane) -- and tmux does not write a utmp
     # entry for the shells it spawns, so a ps-only pts is a pane whose session
     # line `who` happens to carry anyway, not a login.
+    # A login whose terminal is a tmux client (a window running `tmux attach`)
+    # is just a view onto a session already listed, not an extra session.
     for tty, info in who.items():
-        if info["tmux"] or tty in pane_ttys:
+        if info["tmux"] or tty in pane_ttys or tty in client_ttys:
             continue
         proc = ps.get(tty, {})
         sessions.append(

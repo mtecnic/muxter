@@ -27,6 +27,20 @@ tab-7 %8 /dev/pts/15
 tempmon %3 /dev/pts/8
 """
 
+# NOT recorded: written to match the logins above. Seven of the nine plain
+# ssh logins are windows running `tmux attach`; pts/0 (bash + htop) and
+# pts/11 are real shells.
+# shape of:      tmux list-clients -F '#{client_tty}'
+LIST_CLIENTS = """\
+/dev/pts/1
+/dev/pts/2
+/dev/pts/5
+/dev/pts/6
+/dev/pts/7
+/dev/pts/9
+/dev/pts/10
+"""
+
 WHO = """\
 dev-ai   pts/0        2026-09-11 00:15 (192.168.86.44)
 dev-ai   pts/1        2026-09-11 00:15 (192.168.86.44)
