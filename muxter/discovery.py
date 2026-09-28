@@ -109,10 +109,17 @@ def parse_ps_ttys(text: str) -> dict[str, dict]:
 def tty_of_stat_field7(pid: int) -> str | None:
     """Return the controlling tty of a process from /proc/<pid>/stat field 7.
 
-    Field 7 is tty_nr, encoded as (major << 8) | minor, with major 136
-    (0x8800) for the unix98 pty pts/ptmx group: pts/N where
-    N = tty_nr & 0xff. Comm can contain spaces and parens, so the fields
-    after state are counted from the text after the last ')'.
+    Field 7 is tty_nr, encoded as (major << 8) | minor: major 136 (0x8800)
+    for the unix98 pty pts/ptmx group (pts/N with N = tty_nr & 0xff), and the
+    legacy 0x5000 group for the old BSD ptys. tty_nr 0 means no controlling
+    tty. Comm can contain spaces and parens, so the fields after state are
+    counted from the text after the last ')':
+    state(3) ppid(4) pgrp(5) session(6) tty_nr(7), i.e. tail[1].split()[4].
+
+    The recorded PROC_STAT fixtures are *not* in this layout -- they truncate
+    each record right after field 7 and spell the device name verbatim one
+    field later, so field 7 there is a placeholder. Callers pass `ps` output
+    straight through instead; do not trust a fixture-shaped record here.
     """
     try:
         # read the path lazily so tests can monkeypatch PROC_STAT_DIR
@@ -121,13 +128,12 @@ def tty_of_stat_field7(pid: int) -> str | None:
             data = fh.read().decode("ascii", "replace")
     except OSError:
         return None
-    # count fields from the end is safer, but field 7 is fixed from the start
-    # only if comm has no spaces; the ')'-suffix trick handles parens:
+    # the ')'-suffix trick handles parens and spaces in comm: everything
+    # after the last ')' is space-separated, fixed-position fields.
     tail = data.rsplit(")", 1)
     if len(tail) != 2:
         return None
     fields = tail[1].split()
-    # after ')': fields[0] is state (field 3), so tty_nr (field 7) is fields[4]
     if len(fields) < 5:
         return None
     try:
@@ -136,8 +142,8 @@ def tty_of_stat_field7(pid: int) -> str | None:
         return None
     if tty_nr == 0:
         return None
-    # unix98 ptmx major is 136 (0x8800); a tty_nr outside that group and the
-    # legacy 0x5000 group is not a pts we can name
+    # a tty_nr outside the unix98 pts group and the legacy 0x5000 group is not
+    # a pts we can name (it is a /dev/ttyN, a console, or a pty master)
     if tty_nr & ~0xFF not in (0x8800, 0x5000):
         return None
     return f"pts/{tty_nr & 0xFF}"
@@ -158,27 +164,37 @@ async def discover() -> list[Session]:
     ps = parse_ps_ttys(ps_text)
 
     sessions: list[Session] = []
-    tmux_ttys: set[str] = set()
+    pane_ttys: set[str] = set()
     for name, sess in tmux_sessions.items():
         sess_panes = panes.get(name, [])
-        tmux_ttys.update(p["tty"] for p in sess_panes)
-        attached = sum(1 for p in sess_panes if p["tty"] in who and who[p["tty"]]["tmux"])
+        # list-panes reports /dev/pts/N; who and ps say pts/N
+        pane_ttys.update(p["tty"].removeprefix("/dev/") for p in sess_panes)
+        # a tmux session's terminal is the tty its first pane runs on
+        tty = sess_panes[0]["tty"] if sess_panes else None
+        attached = sum(
+            1 for p in sess_panes
+            if p["tty"].removeprefix("/dev/") in who and who[p["tty"].removeprefix("/dev/")]["tmux"]
+        )
         meta = {"panes": [p["pane_id"] for p in sess_panes]}
-        sessions.append(replace(sess, attached=attached, meta=meta))
+        sessions.append(replace(sess, tty=tty, attached=attached, meta=meta))
 
-    # bare sessions: a pts with a process leader that is not a tmux pane
+    # bare sessions: pts logins in `who` that are not a live tmux pane's tty.
+    # `ps` is not a session source of its own -- every tmux pane has a shell in
+    # `ps` on the pane tty (the fixture's zsh 7100 on pts/22 is
+    # clusterspace-pane-fd8404dc's %15 pane) -- and tmux does not write a utmp
+    # entry for the shells it spawns, so a ps-only pts is a pane whose session
+    # line `who` happens to carry anyway, not a login.
     for tty, info in who.items():
-        if info["tmux"] or tty in tmux_ttys:
+        if info["tmux"] or tty in pane_ttys:
             continue
         proc = ps.get(tty, {})
-        pid = proc.get("pid")
         sessions.append(
             Session(
                 kind="bare",
                 name=tty,
                 tty=f"/dev/{tty}",
                 shell=proc.get("comm"),
-                pid=pid,
+                pid=proc.get("pid") or None,
                 created=info["created"],
                 attached=1,
                 meta={"user": info["user"], "from": info["from"]},
