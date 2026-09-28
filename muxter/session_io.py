@@ -131,10 +131,13 @@ class SessionConnection:
                 pass
 
     async def run_command(self, command: str) -> None:
-        """Run a program in the session: tmux send-keys <cmd> Enter."""
-        await _tmux(
-            "tmux", "send-keys", "-t", self.name, "-l", command, "Enter"
-        )
+        """Run a program in the session: tmux send-keys <cmd>, then Enter.
+
+        Two calls: -l makes *every* argument literal, so a trailing "Enter" in
+        the same call is typed as the five letters, never pressed.
+        """
+        await _tmux("tmux", "send-keys", "-t", self.name, "-l", command)
+        await _tmux("tmux", "send-keys", "-t", self.name, "Enter")
 
     async def capture_scrollback(self, lines: int = 500) -> str:
         """Snapshot the session screen+scrollback as plain text."""

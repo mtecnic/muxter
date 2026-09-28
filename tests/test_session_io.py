@@ -110,7 +110,11 @@ async def test_run_command_sends_keys(monkeypatch):
     monkeypatch.setattr(session_io, "_tmux", fake_tmux)
     conn = SessionConnection("dev-ai")
     await conn.run_command("ls -la")
-    assert calls == [("tmux", "send-keys", "-t", "dev-ai", "-l", "ls -la", "Enter")]
+    # -l is literal for every argument, so Enter must be its own call
+    assert calls == [
+        ("tmux", "send-keys", "-t", "dev-ai", "-l", "ls -la"),
+        ("tmux", "send-keys", "-t", "dev-ai", "Enter"),
+    ]
 
 
 async def test_capture_scrollback_uses_capture_pane(monkeypatch):
