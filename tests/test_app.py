@@ -20,6 +20,23 @@ def three_sessions() -> list[Session]:
     ]
 
 
+class FakeConnection:
+    """Records what the app writes to the session and how it is resized."""
+
+    def __init__(self):
+        self.fed: list[bytes] = []
+        self.sizes: list[tuple[int, int]] = []
+
+    def feed(self, data: bytes) -> None:
+        self.fed.append(data)
+
+    def resize(self, rows: int, cols: int) -> None:
+        self.sizes.append((rows, cols))
+
+    def close(self) -> None:
+        pass
+
+
 @pytest.fixture
 def app():
     async def fake_discover():
@@ -83,7 +100,7 @@ async def test_j_k_move_selection_and_update_status(app):
 
 async def test_i_enters_interact_and_escape_returns(app):
     async with app.run_test() as pilot:
-        app.connection = object()  # interact needs a live connection
+        app.connection = FakeConnection()  # interact needs a live connection
         await pilot.press("i")
         assert app._mode == "interact"
         assert app.query_one("#status-bar", StatusBar).mode == "interact"
@@ -116,3 +133,67 @@ async def test_enter_on_the_list_connects(app):
         await pilot.press("enter")
         await pilot.pause()
         assert connected == ["dev-ai"]
+
+
+async def test_interact_forwards_control_and_named_keys(app):
+    async with app.run_test() as pilot:
+        conn = app.connection = FakeConnection()
+        await pilot.press("i", "q", "ctrl+c", "ctrl+b", "home", "pagedown", "f5", "shift+tab")
+        await pilot.pause()
+        assert app.is_running  # q went to the session, not to quit
+        assert conn.fed == [
+            b"q", b"\x03", b"\x02", b"\x1b[H", b"\x1b[6~", b"\x1b[15~", b"\x1b[Z",
+        ]
+
+
+async def test_kill_asks_first_and_n_spares_the_session(app, monkeypatch):
+    from muxter import app as app_module
+
+    killed = []
+
+    async def fake_kill(name):
+        killed.append(name)
+
+    monkeypatch.setattr(app_module, "kill_session", fake_kill)
+    async with app.run_test() as pilot:
+        await pilot.press("K")
+        await pilot.pause()
+        assert "Kill tmux session dev-ai?" in str(app.screen.query_one("#confirm-box").render())
+        await pilot.press("n")
+        await pilot.pause()
+        assert killed == []
+        await pilot.press("K", "y")
+        await pilot.pause()
+        assert killed == ["dev-ai"]
+
+
+async def test_status_bar_is_not_under_the_footer(app):
+    from textual.widgets import Footer
+
+    async with app.run_test():
+        bar = app.query_one("#status-bar", StatusBar).region
+        footer = app.query_one(Footer).region
+        assert bar.height == 1 and not bar.overlaps(footer)
+
+
+async def test_pane_resize_reaches_the_connection(app):
+    async with app.run_test(size=(100, 30)) as pilot:
+        conn = app.connection = FakeConnection()
+        await pilot.resize_terminal(140, 40)
+        await pilot.pause()
+        assert conn.sizes and conn.sizes[-1] == (app.terminal.term.rows, app.terminal.term.cols)
+
+
+async def test_refresh_keeps_the_selected_session(app):
+    async with app.run_test() as pilot:
+        await pilot.press("j", "j")
+        assert app.session_list.selected_session.name == "tempmon"
+        await app.session_list.set_sessions(
+            three_sessions() + [Session(kind="tmux", name="aaa-new")]
+        )
+        assert app.session_list.selected_session.name == "tempmon"
+
+
+async def test_store_refreshes_on_its_own(app):
+    async with app.run_test():
+        assert app.store._task is not None and not app.store._task.done()

@@ -9,6 +9,7 @@ from typing import ClassVar
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal
+from textual.screen import ModalScreen
 from textual.widgets import Footer, Input, ListView, Static
 
 from .discovery import discover as default_discover
@@ -51,6 +52,44 @@ class StatusBar(Static):
         self.update(self.render_text())
 
 
+class ConfirmScreen(ModalScreen[bool]):
+    """A y/n question over the app; dismisses with True only on `y`."""
+
+    DEFAULT_CSS = """
+    ConfirmScreen {
+        align: center middle;
+    }
+    #confirm-box {
+        width: auto;
+        max-width: 80%;
+        padding: 1 3;
+        border: thick $error;
+        background: $surface;
+    }
+    """
+
+    BINDINGS: ClassVar = [
+        Binding("y", "answer(True)", "Yes"),
+        Binding("n", "answer(False)", "No"),
+        Binding("escape", "answer(False)", "", show=False),
+    ]
+
+    def __init__(self, question: str):
+        super().__init__()
+        self.question = question
+
+    def compose(self) -> ComposeResult:
+        yield Static(f"{self.question}\n\n[b]y[/b] yes    [b]n[/b] no", id="confirm-box")
+
+    def action_answer(self, answer: bool) -> None:
+        self.dismiss(answer)
+
+
+def _control_keys() -> dict[str, bytes]:
+    """ctrl+a..ctrl+z as the C0 bytes a terminal sends for them."""
+    return {f"ctrl+{c}": bytes([ord(c) - 96]) for c in "abcdefghijklmnopqrstuvwxyz"}
+
+
 class MuxterApp(App):
     """Two-pane terminal-session monitor: 20% list, 80% live terminal."""
 
@@ -75,7 +114,6 @@ class MuxterApp(App):
         height: 3;
     }
     #status-bar {
-        dock: bottom;
         height: 1;
         background: $panel;
         color: $text;
@@ -103,11 +141,13 @@ class MuxterApp(App):
         self._last_refresh = 0.0
 
     def compose(self) -> ComposeResult:
-        yield StatusBar()
+        yield Input(placeholder="filter sessions…", id="filter-input", disabled=True)
         with Horizontal():
             yield SessionList(id="session-list")
             yield TerminalPane(id="terminal-pane")
-        yield Input(placeholder="filter sessions…", id="filter-input", disabled=True)
+        # in the flow between the panes and the footer: docked to the bottom
+        # too, it sat in the footer's row and was drawn underneath it
+        yield StatusBar()
         yield Footer()
 
     async def on_mount(self) -> None:
@@ -119,11 +159,21 @@ class MuxterApp(App):
         await self.store.refresh_now()
         self._refresh_status()
         self.set_interval(1.0, self._tick)
+        self.store.start()
+
+    async def on_unmount(self) -> None:
+        await self.store.stop()
+        if self.connection is not None:
+            self.connection.close()
 
     async def _on_sessions_changed(self, added: list[Session], removed: list[Session]) -> None:
         await self.session_list.set_sessions(self.store.sessions)
         self._last_refresh = time.time()
         self._refresh_status()
+
+    def on_terminal_pane_resized(self, event: TerminalPane.Resized) -> None:
+        if self.connection is not None:
+            self.connection.resize(event.rows, event.cols)
 
     def _refresh_status(self) -> None:
         age = int(time.time() - self._last_refresh)
@@ -195,9 +245,18 @@ class MuxterApp(App):
         self.filter_input.disabled = False
         self.session_list.focus()
 
+    # xterm's encodings. Keys are matched by name first: Textual hands some
+    # of these over with no character (and binds ctrl+c itself), so the
+    # character alone would silently drop them.
     _KEY_ESCAPES: ClassVar[Mapping[str, bytes]] = {
         "up": b"\x1b[A", "down": b"\x1b[B", "right": b"\x1b[C", "left": b"\x1b[D",
-        "enter": b"\r", "backspace": b"\x7f",
+        "enter": b"\r", "backspace": b"\x7f", "tab": b"\t", "shift+tab": b"\x1b[Z",
+        "home": b"\x1b[H", "end": b"\x1b[F", "insert": b"\x1b[2~", "delete": b"\x1b[3~",
+        "pageup": b"\x1b[5~", "pagedown": b"\x1b[6~",
+        "f1": b"\x1bOP", "f2": b"\x1bOQ", "f3": b"\x1bOR", "f4": b"\x1bOS",
+        "f5": b"\x1b[15~", "f6": b"\x1b[17~", "f7": b"\x1b[18~", "f8": b"\x1b[19~",
+        "f9": b"\x1b[20~", "f10": b"\x1b[21~", "f11": b"\x1b[23~", "f12": b"\x1b[24~",
+        **_control_keys(),
     }
 
     def on_key(self, event) -> None:
@@ -211,11 +270,11 @@ class MuxterApp(App):
             event.prevent_default()
             self.action_view()
             return
-        data = None
-        if event.character and len(event.character) == 1:
+        data = self._KEY_ESCAPES.get(event.key)
+        if data is None and event.key.startswith("alt+") and event.character:
+            data = b"\x1b" + event.character.encode("utf-8")
+        elif data is None and event.character and len(event.character) == 1:
             data = event.character.encode("utf-8")
-        else:
-            data = self._KEY_ESCAPES.get(event.key)
         if data is not None:
             self.connection.feed(data)
             event.stop()
@@ -228,21 +287,33 @@ class MuxterApp(App):
         command = self.filter_input.value or "ls"
         await self.connection.run_command(command)
 
-    async def action_kill(self) -> None:
+    def action_kill(self) -> None:
         session = self.session_list.selected_session
-        if session is None:
+        if session is None or (session.kind != "tmux" and not session.pid):
             return
+        what = f"tmux session {session.name}" if session.kind == "tmux" else (
+            f"{session.shell or 'the shell'} (pid {session.pid}) on {session.name}"
+        )
+
+        async def answered(yes: bool | None) -> None:
+            if yes:
+                await self._kill(session)
+
+        self.push_screen(ConfirmScreen(f"Kill {what}?"), answered)
+
+    async def _kill(self, session: Session) -> None:
         if session.kind == "tmux":
             await kill_session(session.name)
-        elif session.pid:
+        else:
             await kill_bare(session.pid)
+        await self.store.refresh_now()
 
     def action_clear_pane(self) -> None:
+        # local only: this used to feed ESC[H ESC[2J to the session, which
+        # types those bytes into its shell as if you had pressed them
         self.terminal.term.reset()
         self.terminal.term.clear_history()
         self.terminal.refresh_screen()
-        if self.connection is not None:
-            self.connection.feed(b"\x1b[H\x1b[2J")
 
     def action_filter(self) -> None:
         self.filter_input.disabled = False

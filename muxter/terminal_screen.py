@@ -12,6 +12,7 @@ import dataclasses
 
 import pyte
 from rich.text import Text
+from textual.message import Message
 from textual.widgets import Static
 
 
@@ -285,6 +286,14 @@ class TerminalPane(Static):
     #: the pane must be focusable: in interact mode it owns the keystrokes
     can_focus = True
 
+    class Resized(Message):
+        """The emulator changed size; the attached client should follow."""
+
+        def __init__(self, rows: int, cols: int) -> None:
+            super().__init__()
+            self.rows = rows
+            self.cols = cols
+
     def __init__(self, *args, screen: TerminalScreen | None = None, **kwargs):
         # Textual Widget already owns a `screen` property; don't shadow it.
         kwargs.setdefault("name", "terminal")
@@ -304,6 +313,7 @@ class TerminalPane(Static):
         height = max(self.size.height, 1)
         if (height, width) != (self.term.rows, self.term.cols):
             self.term.resize(width, height)
+            self.post_message(self.Resized(height, width))
 
     def set_content(self, data: bytes) -> None:
         """Feed a chunk of the live byte stream and redraw."""

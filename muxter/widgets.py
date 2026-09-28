@@ -19,12 +19,16 @@ class SessionList(ListView):
         self.filter_text: str = ""
 
     async def set_sessions(self, sessions: list[Session]) -> None:
+        # the store refreshes on a timer: a new session must not yank the
+        # cursor off the one you were looking at
+        keep = self.selected_session
         self.sessions = sorted(sessions, key=lambda s: s.name)
-        await self.refresh_list()
+        await self.refresh_list(keep=keep.key if keep else None)
 
     async def set_filter(self, text: str) -> None:
+        keep = self.selected_session
         self.filter_text = text.lower()
-        await self.refresh_list()
+        await self.refresh_list(keep=keep.key if keep else None)
 
     def visible_sessions(self) -> list[Session]:
         """What the filter currently admits, without touching the DOM.
@@ -43,7 +47,7 @@ class SessionList(ListView):
         ).lower()
         return self.filter_text in haystack
 
-    async def refresh_list(self) -> None:
+    async def refresh_list(self, keep: str | None = None) -> None:
         """Rebuild the items through ListView's own API.
 
         The first version built `ListItem`s into a fresh `NodeList` via the private
@@ -55,13 +59,12 @@ class SessionList(ListView):
         keyword; unmounted children in the DOM cost the whole suite.
         """
         await self.clear()
-        items = [
-            ListItem(Label(self._label(session)), name=session.key)
-            for session in self.visible_sessions()
-        ]
+        visible = self.visible_sessions()
+        items = [ListItem(Label(self._label(session)), name=session.key) for session in visible]
         if items:
             await self.extend(items)
-        self.index = 0 if items else None
+        keys = [session.key for session in visible]
+        self.index = (keys.index(keep) if keep in keys else 0) if items else None
 
     @staticmethod
     def _label(session: Session) -> Text:
