@@ -86,3 +86,33 @@ def test_feed_in_small_chunks():
     for i in range(len(data)):
         ts.feed(data[i : i + 1])
     assert ts.live_lines()[0].plain == "hello world"
+
+
+def test_truecolor_and_pyte_colour_names_render():
+    # pyte says "brown" for yellow and bare hex for 256/truecolour; rich
+    # rejects both, which crashed the pane on the first coloured redraw
+    # (rich's own renderer swallows a bad style; Textual's does not)
+    from rich.style import Style
+    s = TerminalScreen(cols=20, rows=2)
+    s.feed(b"\x1b[33;48;2;0;0;0mhi\x1b[93mx\x1b[0m")
+    styles = [span.style for line in s.live_lines() for span in line.spans]
+    assert styles
+    for style in styles:
+        Style.parse(style)
+
+
+def test_reset_and_clear_history():
+    s = TerminalScreen(cols=10, rows=2)
+    s.feed(b"a\r\nb\r\nc\r\nd")
+    assert s.history_plain()
+    s.reset()
+    s.clear_history()
+    assert s.history_plain() == [] and not "".join(s.live_plain()).strip()
+
+
+def test_multibyte_split_across_feeds():
+    s = TerminalScreen(cols=10, rows=1)
+    data = "╭─".encode()
+    s.feed(data[:2])
+    s.feed(data[2:])
+    assert s.live_plain()[0].startswith("╭─")

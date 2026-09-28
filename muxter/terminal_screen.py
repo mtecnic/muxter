@@ -6,6 +6,7 @@ Textual widget renders history-then-live with colour.
 
 from __future__ import annotations
 
+import codecs
 import collections
 import dataclasses
 
@@ -123,10 +124,22 @@ class TerminalScreen:
         # construction, so it must be built after the deques are swapped).
         init_screen(self.screen)
         self.stream = self.screen.stream
+        # PTY reads split anywhere, including mid-character
+        self._decoder = codecs.getincrementaldecoder("utf-8")("replace")
 
     def feed(self, data: bytes | str) -> None:
         """Feed raw terminal bytes; pyte's stream parses the stream of text."""
-        self.stream.feed(data.decode("utf-8", "ignore") if isinstance(data, bytes) else data)
+        self.stream.feed(self._decoder.decode(data) if isinstance(data, bytes) else data)
+
+    def reset(self) -> None:
+        """Blank the live screen; the reset hook re-applies init_screen()."""
+        self.screen.reset()
+        self.stream = self.screen.stream
+
+    def clear_history(self) -> None:
+        """Drop scrollback; pyte's History is a namedtuple of two deques."""
+        self.screen.history.top.clear()
+        self.screen.history.bottom.clear()
 
     def resize(self, cols: int, rows: int) -> None:
         """Resize the screen, reflowing content rather than clipping it.
@@ -228,15 +241,28 @@ class TerminalScreen:
         return text
 
 
+def _rich_color(color: str) -> str:
+    """pyte colour name -> rich colour name.
+
+    pyte spells 256-colour and truecolour as bare hex ("00ff5f"), yellow as
+    "brown", and the bright set as "brightred"; rich rejects all three.
+    """
+    if len(color) == 6 and all(c in "0123456789abcdefABCDEF" for c in color):
+        return f"#{color}"
+    if color.startswith("bright") and not color.startswith("bright_"):
+        color = "bright_" + color[len("bright"):]
+    return color.replace("brown", "yellow")
+
+
 def _char_style(char) -> str:
     """Rich style string from a pyte Char: fg/bg colour and basic attributes."""
     parts: list[str] = []
     fg = getattr(char, "fg", "default")
     bg = getattr(char, "bg", "default")
     if fg and fg != "default":
-        parts.append(str(fg))
+        parts.append(_rich_color(str(fg)))
     if bg and bg != "default":
-        parts.append(f"on {bg}")
+        parts.append(f"on {_rich_color(str(bg))}")
     if getattr(char, "bold", False):
         parts.append("bold")
     if getattr(char, "reverse", False):

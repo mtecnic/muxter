@@ -101,3 +101,18 @@ async def test_q_quits(app):
     async with app.run_test() as pilot:
         await pilot.press("q")
         assert app.is_running is False
+
+
+async def test_enter_on_the_list_connects(app):
+    # the focused ListView eats Enter, so the app binding alone never fired
+    connected = []
+
+    async def spy(session):
+        connected.append(session.name)
+
+    app._connect = spy
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        await pilot.press("enter")
+        await pilot.pause()
+        assert connected == ["dev-ai"]

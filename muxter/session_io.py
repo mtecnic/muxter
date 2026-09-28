@@ -68,14 +68,18 @@ class SessionConnection:
         self._reader = asyncio.create_task(self._pump(reader))
 
     async def _pump(self, reader) -> None:
-        """Drain the master until EOF, delivering every line to subscribers.
+        """Drain the master until EOF, delivering every chunk to subscribers.
+
+        Chunks, not lines: a tmux client redraws with cursor addressing and
+        almost never emits a newline, so readline() starved the pane (and
+        would raise past its 64 KiB limit).
 
         Delivery is *not* gated on ``self.closed``: a connection closed at
         EOF must still have delivered everything already read.
         """
         try:
             while True:
-                data = await reader.readline()
+                data = await reader.read(65536)
                 if not data:
                     break
                 for cb in list(self._subscribers):

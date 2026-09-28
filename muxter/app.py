@@ -9,7 +9,7 @@ from typing import ClassVar
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal
-from textual.widgets import Footer, Input, Static
+from textual.widgets import Footer, Input, ListView, Static
 
 from .discovery import discover as default_discover
 from .model import Session, SessionStore
@@ -153,21 +153,30 @@ class MuxterApp(App):
             return
         await self._connect(session)
 
+    async def on_list_view_selected(self, event: ListView.Selected) -> None:
+        # the focused ListView consumes Enter itself (select_cursor), so the
+        # app-level "enter" binding never fires while the list has focus
+        event.stop()
+        await self.action_connect()
+
     async def _connect(self, session: Session) -> None:
         if self.connection is not None:
             self.connection.close()
         conn = SessionConnection(session.name, rows=self.terminal.term.rows,
                                  cols=self.terminal.term.cols)
-        self.connection = conn
-        conn.subscribe(self.terminal.set_content)
-        await conn.connect()
+        # seed scrollback *before* attaching, so the live redraw lands on top
+        # of it instead of the snapshot being printed over the live screen
         try:
             scrollback = await conn.capture_scrollback()
         except RuntimeError:
             scrollback = ""
-        self.terminal.term.screen.history.clear()
+        self.terminal.term.reset()
+        self.terminal.term.clear_history()
         if scrollback:
             self.terminal.term.feed(scrollback)
+        self.connection = conn
+        conn.subscribe(self.terminal.set_content)
+        await conn.connect()
         self.terminal.refresh_screen()
         self.status.update_bar(session=session)
 
@@ -230,7 +239,7 @@ class MuxterApp(App):
 
     def action_clear_pane(self) -> None:
         self.terminal.term.reset()
-        self.terminal.term.screen.history.clear()
+        self.terminal.term.clear_history()
         self.terminal.refresh_screen()
         if self.connection is not None:
             self.connection.feed(b"\x1b[H\x1b[2J")
